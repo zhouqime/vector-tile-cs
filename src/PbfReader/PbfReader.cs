@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using Mapbox.VectorTile.Contants;
@@ -18,30 +19,34 @@ namespace Mapbox.VectorTile
 	/// <summary>
 	/// Low level protobuf (PBF) decoder https://developers.google.com/protocol-buffers/docs/overview
 	/// </summary>
-	public class PbfReader
+	public ref struct PbfReader
 	{
 
 
 		/// <summary>Tag at current position</summary>
-		public int Tag { get; private set; }
+		public int Tag { get; private set; } 
 		/// <summary>Value at current position</summary>
-		public ulong Value { get; private set; }
 		//public ulong Pos { get; private set; }
 		/// <summary>Wire type at current position</summary>
 		public WireTypes WireType { get; private set; }
 
-
-		private byte[] _buffer;
+		private ulong _value;
+		private ReadOnlySpan<byte> _buffer;
 		private ulong _length;
 		private ulong _pos;
+		
 
 
 		/// <summary>
 		/// PbfReader constructor
 		/// </summary>
 		/// <param name="tileBuffer">Byte array containing the raw (already unzipped) tile data</param>
-		public PbfReader(byte[] tileBuffer)
+		public PbfReader(ReadOnlySpan<byte> tileBuffer)
 		{
+			Tag = 0;
+			_value = 0;
+			_pos = 0;
+
 			_buffer = tileBuffer;
 			_length = (ulong)_buffer.Length;
 			WireType = WireTypes.UNDEFINED;
@@ -61,7 +66,7 @@ namespace Mapbox.VectorTile
 			long result = 0;
 			while (shift < 64)
 			{
-				byte b = _buffer[_pos];
+				byte b = _buffer[(int)_pos];
 				result |= (long)(b & 0x7F) << shift;
 				_pos++;
 				if ((b & 0x80) == 0)
@@ -80,7 +85,7 @@ namespace Mapbox.VectorTile
 		/// <para>TODO: refactor to return a DataView instead of a byte array</para>
 		/// </summary>
 		/// <returns>Byte array containing the view</returns>
-		public byte[] View()
+		public ReadOnlySpan<byte> View()
 		{
 			// return layer/feature subsections of the main stream
 			if (Tag == 0)
@@ -95,10 +100,7 @@ namespace Mapbox.VectorTile
 			ulong skipBytes = (ulong)Varint();
 			SkipBytes(skipBytes);
 
-			byte[] buf = new byte[skipBytes];
-			System.Array.Copy(_buffer, (int)_pos - (int)skipBytes, buf, 0, (int)skipBytes);
-
-			return buf;
+			return _buffer.Slice((int)_pos - (int)skipBytes, (int)skipBytes);
 		}
 
 
@@ -163,10 +165,9 @@ namespace Mapbox.VectorTile
 		/// <returns>Decoded double</returns>
 		public double GetDouble()
 		{
-			byte[] buf = new byte[8];
-			System.Array.Copy(_buffer, (int)_pos, buf, 0, 8);
+			double dblVal = System.BitConverter.ToDouble(_buffer.Slice((int)_pos, 8));
 			_pos += 8;
-			double dblVal = System.BitConverter.ToDouble(buf, 0);
+
 			return dblVal;
 		}
 
@@ -177,10 +178,8 @@ namespace Mapbox.VectorTile
 		/// <returns>Decoded float</returns>
 		public float GetFloat()
 		{
-			byte[] buf = new byte[4];
-			System.Array.Copy(_buffer, (int)_pos, buf, 0, 4);
+			float snglVal = System.BitConverter.ToSingle(_buffer.Slice((int)_pos,4));
 			_pos += 4;
-			float snglVal = System.BitConverter.ToSingle(buf, 0);
 			return snglVal;
 		}
 
@@ -192,10 +191,9 @@ namespace Mapbox.VectorTile
 		/// <returns>Decoded string</returns>
 		public string GetString(ulong length)
 		{
-			byte[] buf = new byte[length];
-			System.Array.Copy(_buffer, (int)_pos, buf, 0, (int)length);
+			var buff = _buffer.Slice((int)_pos, (int)length);
 			_pos += length;
-			return Encoding.UTF8.GetString(buf, 0, buf.Length);
+			return Encoding.UTF8.GetString(buff);
 		}
 
 
@@ -211,8 +209,8 @@ namespace Mapbox.VectorTile
 			}
 			// get and process the next byte in the buffer
 			// return true until end of stream
-			Value = (ulong)Varint();
-			Tag = (int)Value >> 3;
+			_value = (ulong)Varint();
+			Tag = (int)_value >> 3;
 			if (
 				(Tag == 0 || Tag >= 19000)
 				&& (Tag > 19999 || Tag <= ((1 << 29) - 1))
@@ -220,7 +218,7 @@ namespace Mapbox.VectorTile
 			{
 				throw new System.Exception("tag out of range");
 			}
-			WireType = (WireTypes)(Value & 0x07);
+			WireType = (WireTypes)(_value & 0x07);
 			return true;
 		}
 

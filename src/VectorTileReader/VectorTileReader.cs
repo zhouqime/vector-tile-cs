@@ -46,7 +46,7 @@ namespace Mapbox.VectorTile
 		}
 
 
-		private Dictionary<string, byte[]> _Layers = new Dictionary<string, byte[]>();
+		private readonly Dictionary<string, byte[]> _Layers = new();
 		private bool _Validate;
 
 
@@ -65,7 +65,7 @@ namespace Mapbox.VectorTile
 				if (tileReader.Tag == (int)TileType.Layers)
 				{
 					string name = null;
-					byte[] layerMessage = tileReader.View();
+					var layerMessage = tileReader.View();
 					PbfReader layerView = new PbfReader(layerMessage);
 					while (layerView.NextByte())
 					{
@@ -90,7 +90,7 @@ namespace Mapbox.VectorTile
 							throw new System.Exception(string.Format("Duplicate layer names: {0}", name));
 						}
 					}
-					_Layers.Add(name, layerMessage);
+					_Layers.Add(name, layerMessage.ToArray());
 				}
 				else
 				{
@@ -159,20 +159,20 @@ namespace Mapbox.VectorTile
 						layer.Extent = (ulong)layerReader.Varint();
 						break;
 					case LayerType.Keys:
-						byte[] keyBuffer = layerReader.View();
-						string key = Encoding.UTF8.GetString(keyBuffer, 0, keyBuffer.Length);
+						var keyBuffer = layerReader.View();
+						string key = Encoding.UTF8.GetString(keyBuffer);
 						layer.Keys.Add(key);
 						break;
 					case LayerType.Values:
-						byte[] valueBuffer = layerReader.View();
+						var valueBuffer = layerReader.View();
 						PbfReader valReader = new PbfReader(valueBuffer);
 						while (valReader.NextByte())
 						{
 							switch ((ValueType)valReader.Tag)
 							{
 								case ValueType.String:
-									byte[] stringBuffer = valReader.View();
-									string value = Encoding.UTF8.GetString(stringBuffer, 0, stringBuffer.Length);
+									var stringBuffer = valReader.View();
+									string value = Encoding.UTF8.GetString(stringBuffer);
 									layer.Values.Add(value);
 									break;
 								case ValueType.Float:
@@ -213,7 +213,7 @@ namespace Mapbox.VectorTile
 						}
 						break;
 					case LayerType.Features:
-						layer.AddFeatureData(layerReader.View());
+						layer.AddFeatureData(layerReader.View().ToArray());
 						break;
 					default:
 						layerReader.Skip();
