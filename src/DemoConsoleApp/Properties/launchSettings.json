@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DemoConsoleApp": {
+        "commandName": "Project",
+        "commandLineArgs": "vt:\"..\\data\\Feature-single-linestring.mvt\" tileid:1-1-1 out:geojson"
+    }
+  }
+}
